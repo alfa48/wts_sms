@@ -53,6 +53,9 @@ web_modules/
 .cache
 .parcel-cache
 
+.wwebjs_auth
+.wwebjs_cache
+
 # Next.js build output
 .next
 out
