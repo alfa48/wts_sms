@@ -11,11 +11,6 @@ app.use(express.json());
 
 // Rotas
 const clientRoutes = require('./api/clients/client.routes');
-
-
-
-
 app.use('/api/clients', clientRoutes);
-
 
 module.exports = app;
