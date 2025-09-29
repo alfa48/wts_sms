@@ -108,4 +108,14 @@ function cleanSessionDir(id) {
      }
 }
 
-module.exports = { notifyConnection, resetClient, cleanSessionDir };
+async function isDatabaseAvailable(prisma) {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+
+module.exports = { notifyConnection, resetClient, cleanSessionDir, isDatabaseAvailable };

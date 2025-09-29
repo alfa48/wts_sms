@@ -14,6 +14,32 @@ const activeClients = new Map();
 function initClient(id) {
   const client = new Client({
     authStrategy: new LocalAuth({ clientId: id }),
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--no-first-run',
+      '--no-zygote',
+      '--disable-gpu',
+      '--disable-software-rasterizer',
+      '--disable-extensions',
+      '--disable-default-apps',
+      '--disable-sync',
+      '--disable-background-networking',
+      '--disable-background-timer-throttling',
+      '--disable-breakpad',
+      '--disable-client-side-phishing-detection',
+      '--disable-component-update',
+      '--disable-domain-reliability',
+      '--disable-renderer-backgrounding',
+      '--mute-audio',
+      '--metrics-recording-only',
+      '--no-default-browser-check',
+      '--ignore-certificate-errors',
+      '--ignore-ssl-errors',
+      '--user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"'
+    ]
   });
 
   activeClients.set(id, {
@@ -24,35 +50,32 @@ function initClient(id) {
   });
 
   client.on("qr", (qr) => {
-    console.log(`[client ${id}] QR gerado`);
-    // Se já tinha timeout, cancela
-    const oldTimeout = activeClients.get(id)?.timeout;
-    if (oldTimeout) {
-      clearTimeout(oldTimeout);
-    }
-    // Timeout de x minutos
+  console.log(`[client ${id}] QR gerado`);
+
+  const existing = activeClients.get(id);
+  // Só cria o timeout se ainda não existir
+  if (!existing?.timeout) {
     const timeout = setTimeout(() => {
       const cData = activeClients.get(id);
       if (cData && cData.status !== utils.STATE_CONNECTED) {
-        console.log(`[client ${id}] QR expirou, destruindo instância local...`);
+        console.log(`[client ${id}] Tempo máximo expirou, destruindo instância...`);
         try {
           cData.client.destroy();
         } catch (err) {
           console.error(`[client ${id}] erro ao destruir client:`, err.message);
         }
-        activeClients.delete(id); // remove da memória
+        clientRepo.setClient(id, { status: utils.STATE_DISCONNECTED });
+        activeClients.delete(id);
       }
-    }, 5 * 60 * 1000);
+    }, 5 * 60 * 1000); // 5 minutos totais
 
-    // Atualiza apenas em memória
-    activeClients.set(id, {
-      client,
-      qr,
-      timeout,
-      status: utils.STATE_DISCONNECTED,
-    });
-    clientRepo.setClient(id, { status: utils.STATE_DISCONNECTED });
-  });
+    activeClients.set(id, { client, qr, timeout, status: utils.STATE_DISCONNECTED });
+  }
+  else {activeClients.set(id, { ...existing, qr, status: utils.STATE_DISCONNECTED });}
+
+  clientRepo.setClient(id, { status: utils.STATE_DISCONNECTED });
+});
+
 
   client.on("ready", async () => {
     try {
@@ -63,7 +86,7 @@ function initClient(id) {
         console.log(`::::: [client ${id}] timeout cleared`);
       }
       console.log(`::::: [client ${client.status}] status set to CONNECTED`);
-      activeClients.set(id, {client,status: utils.STATE_CONNECTED,});
+      activeClients.set(id, { client, status: utils.STATE_CONNECTED });
       await clientRepo.setClient(id, { status: utils.STATE_CONNECTED });
       notifyConnection(id, true); // conectado
     } catch (err) {
@@ -75,7 +98,7 @@ function initClient(id) {
   client.on("disconnected", () => {
     try {
       console.log(`::::: [client ${id}] disconnected`);
-      clientRepo.setClient(id, { status: utils.STATE_DISCONNECTED });
+      exports.disconnectClient(id);
       notifyConnection(id, false); // desconectado
     } catch (err) {
       console.error(
@@ -96,6 +119,11 @@ function initClient(id) {
         err.message
       );
     }
+  });
+
+  client.on("message", (msg) => {
+    console.log(`::::: [client ${id}] mensagem recebida : type: ${msg.type}`);
+    // Aqui você pode adicionar lógica para processar a mensagem recebida
   });
 
   // Protege a inicialização
@@ -134,14 +162,13 @@ exports.getQr = async (id) => {
   let clientData = activeClients.get(id);
 
   if (!clientData) {
-    const persisted = await clientRepo.getClient(id);
+    clientData = await clientRepo.getClient(id);
 
-    if (!persisted) {
+    if (!clientData) {
       console.warn(`[client:${id}] Não encontrado na memória nem no DB.`);
       throw new Error("NOT_FOUND");
     }
     console.log(`[client:${id}] Encontrado no DB. Inicializando cliente...`);
-    clientData =  clientRepo.getClient(id);
     console.log(clientData.status);
     if (clientData.status === utils.STATE_CONNECTED) {
       return { status: utils.STATE_CONNECTED };
@@ -152,6 +179,7 @@ exports.getQr = async (id) => {
     } catch (err) {
       console.error(`::::: [client ${id}] initialize error:`, err.message);
     }
+
     if (!client) {
       throw new Error("NOT_FOUND");
     }
@@ -167,7 +195,7 @@ exports.getQr = async (id) => {
   // Espera até o QR ser gerado (máximo 10s)
   let tries = 0;
   while (!clientData.qr && tries < 20) {
-    await new Promise((r) => setTimeout(r, 500)); // espera 0.5s
+    await new Promise((r) => setTimeout(r, 1000)); // espera 0.5s
     clientData = activeClients.get(id);
     tries++;
   }
@@ -199,10 +227,12 @@ exports.sendMessage = async (id, to, message) => {
 exports.disconnectClient = async (id) => {
   try {
     console.log(`::::: [service] disconnectClient -> ${id}`);
-    
-    
-    if(clientRepo.getClient(id)){await clientRepo.setClient(id, { status: utils.STATE_DISCONNECTED });}
-    else{throw new Error("NOT_ACTIVE");}
+
+    if (clientRepo.getClient(id)) {
+      await clientRepo.setClient(id, { status: utils.STATE_DISCONNECTED });
+    } else {
+      throw new Error("NOT_ACTIVE");
+    }
     const clientData = activeClients.get(id);
     if (!clientData || !clientData.client) {
       functions.cleanSessionDir(id);
@@ -240,9 +270,9 @@ exports.bootstrapClients = async () => {
     if (client.status === utils.STATE_CONNECTED) {
       console.log(`[client:${client.id}] Restoring client from persistence`);
       initClient(client.id);
+      console.log(`[bootstrapClients] ::: Reconectar client ${client.id}...`);
+      // Aguarda 2 segundos entre cada inicialização para evitar sobrecarga
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
   }
-
-  console.log("[bootstrapClients] ::: Todos os clientes restaurados");
 };

@@ -1,7 +1,7 @@
 const { PrismaClient } = require("@prisma/client");
 const utils = require("./../../utils/constants");
 const prisma = new PrismaClient();
-
+const functions = require("./../../utils/functions/functions");
 
 exports.setClient = async (id, data) => {
   const toPersist = {
@@ -23,7 +23,6 @@ exports.setClient = async (id, data) => {
   }
 };
 
-
 exports.getClient = async (id) => {
   try {
     const client = await prisma.client.findUnique({ where: { id } });
@@ -33,11 +32,13 @@ exports.getClient = async (id) => {
     }
     return client;
   } catch (error) {
-    console.error(`[repo] Erro ao buscar client ${id}:`, error.message || error);
+    console.error(
+      `[repo] Erro ao buscar client ${id}:`,
+      error.message || error
+    );
     return null;
   }
 };
-
 
 exports.deleteClient = async (id) => {
   try {
@@ -45,23 +46,34 @@ exports.deleteClient = async (id) => {
     console.log(`[repo] deleteClient -> ${id}`);
     return true;
   } catch (error) {
-    if (error.code === 'P2025') {
+    if (error.code === "P2025") {
       console.warn(`[repo] Cliente ${id} não existe, nada para apagar.`);
     } else {
-      console.error(`[repo] Erro ao apagar client ${id}:`, error.message || error);
+      console.error(
+        `[repo] Erro ao apagar client ${id}:`,
+        error.message || error
+      );
     }
     return false;
   }
 };
 
-
 exports.getAllPersisted = async () => {
+  const available = await functions.isDatabaseAvailable(prisma);
+  if (!available) {
+    console.warn(
+      "[bootstrapClients] Banco de dados indisponível. Pulando restauração..."
+    );
+    return [];
+  }
   try {
     const clients = await prisma.client.findMany();
     return clients;
   } catch (error) {
-    console.error(`[repo] Erro ao buscar todos os clients:`, error.message || error);
+    console.error(
+      `[repo] Erro ao buscar todos os clients:`,
+      error.message || error
+    );
     return [];
   }
 };
-

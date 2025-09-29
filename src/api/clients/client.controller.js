@@ -1,5 +1,6 @@
 // controllers/clientController.js
 const clientService = require("./../../services/client/clientService");
+const { notifyConnection } = require("./../../utils/functions/functions");
 
 exports.createClient = async (req, res) => {
   try {
@@ -49,6 +50,7 @@ exports.disconnectClient = async (req, res) => {
 
   try {
     await clientService.disconnectClient(id);
+    notifyConnection(id, false); // desconectado
     res.json({ success: true, message: `Client ${id} desconectado` });
   } catch (err) {
     console.error("Erro ao desconectar client:", err.message || err);
