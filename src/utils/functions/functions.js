@@ -48,7 +48,7 @@ async function resetClient(client, clientId = null) {
     if (!removed) {
       console.warn("::: folder auth not found for this clientId:", clientId);
     } else {
-      console.log("auth local removed. next init will ask new QR.");
+      console.log(`auth local removed. next init will ask new QR.`);
     }
   } catch (err) {
     console.error("Erro no resetClient:", err);
@@ -58,17 +58,16 @@ async function resetClient(client, clientId = null) {
 async function notifyConnection(id, connected) {
   try {
     const url = connected
-      ? "https://app.foi-sms.com/crud/campanha/conectar-whatsapp"
-      : "https://app.foi-sms.com/crud/campanha/desconectar-whatsapp";
+      ? `https://app.foi-sms.com/crud/campanha/notify/conectar-whatsapp/${id}`
+      : `https://app.foi-sms.com/crud/campanha/notify/desconectar-whatsapp/${id}`;
 
     const payload = { clienteId: id };
 
     const res = await axios.post(url, payload, { timeout: 5000 });
-
     console.log(
       `::::: [client ${id}] notify ${
         connected ? "connect" : "disconnect"
-      } -> status: ${res.status}, response: ${res.data?.message || "OK"}`
+      } -> status: ${res.status}, response: ${res.data || "OK"}`
     );
   } catch (err) {
     if (err.response) {

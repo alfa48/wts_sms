@@ -1,4 +1,9 @@
 // services/clientService.js
+/* Rever o comportamento de bd indisponível
+quando o client tenta reconectar e o bd não está acessível mas ainda
+assim gera o id do client.
+ */
+
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const QRCode = require("qrcode");
 const { v4: uuidv4 } = require("uuid");
@@ -15,32 +20,34 @@ function initClient(id) {
   const client = new Client({
     authStrategy: new LocalAuth({ clientId: id }),
     args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-      '--no-zygote',
-      '--disable-gpu',
-      '--disable-software-rasterizer',
-      '--disable-extensions',
-      '--disable-default-apps',
-      '--disable-sync',
-      '--disable-background-networking',
-      '--disable-background-timer-throttling',
-      '--disable-breakpad',
-      '--disable-client-side-phishing-detection',
-      '--disable-component-update',
-      '--disable-domain-reliability',
-      '--disable-renderer-backgrounding',
-      '--mute-audio',
-      '--metrics-recording-only',
-      '--no-default-browser-check',
-      '--ignore-certificate-errors',
-      '--ignore-ssl-errors',
-      '--user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"'
-    ]
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-accelerated-2d-canvas",
+      "--no-first-run",
+      "--no-zygote",
+      "--disable-gpu",
+      "--disable-software-rasterizer",
+      "--disable-extensions",
+      "--disable-default-apps",
+      "--disable-sync",
+      "--disable-background-networking",
+      "--disable-background-timer-throttling",
+      "--disable-breakpad",
+      "--disable-client-side-phishing-detection",
+      "--disable-component-update",
+      "--disable-domain-reliability",
+      "--disable-renderer-backgrounding",
+      "--mute-audio",
+      "--metrics-recording-only",
+      "--no-default-browser-check",
+      "--ignore-certificate-errors",
+      "--ignore-ssl-errors",
+      '--user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"',
+    ],
   });
+
+
 
   activeClients.set(id, {
     client,
@@ -50,32 +57,46 @@ function initClient(id) {
   });
 
   client.on("qr", (qr) => {
-  console.log(`[client ${id}] QR gerado`);
+    console.log(`[client ${id}] QR gerado`);
 
-  const existing = activeClients.get(id);
-  // Só cria o timeout se ainda não existir
-  if (!existing?.timeout) {
-    const timeout = setTimeout(() => {
-      const cData = activeClients.get(id);
-      if (cData && cData.status !== utils.STATE_CONNECTED) {
-        console.log(`[client ${id}] Tempo máximo expirou, destruindo instância...`);
-        try {
-          cData.client.destroy();
-        } catch (err) {
-          console.error(`[client ${id}] erro ao destruir client:`, err.message);
+    const existing = activeClients.get(id);
+    // Só cria o timeout se ainda não existir
+    if (!existing?.timeout) {
+      const timeout = setTimeout(() => {
+        const cData = activeClients.get(id);
+        if (cData && cData.status !== utils.STATE_CONNECTED) {
+          console.log(
+            `[client ${id}] Tempo máximo expirou, destruindo instância...`
+          );
+          try {
+            cData.client.destroy();
+          } catch (err) {
+            console.error(
+              `[client ${id}] erro ao destruir client:`,
+              err.message
+            );
+          }
+          clientRepo.setClient(id, { status: utils.STATE_DISCONNECTED });
+          activeClients.delete(id);
         }
-        clientRepo.setClient(id, { status: utils.STATE_DISCONNECTED });
-        activeClients.delete(id);
-      }
-    }, 5 * 60 * 1000); // 5 minutos totais
+      }, 5 * 60 * 1000); // 5 minutos totais
 
-    activeClients.set(id, { client, qr, timeout, status: utils.STATE_DISCONNECTED });
-  }
-  else {activeClients.set(id, { ...existing, qr, status: utils.STATE_DISCONNECTED });}
+      activeClients.set(id, {
+        client,
+        qr,
+        timeout,
+        status: utils.STATE_DISCONNECTED,
+      });
+    } else {
+      activeClients.set(id, {
+        ...existing,
+        qr,
+        status: utils.STATE_DISCONNECTED,
+      });
+    }
 
-  clientRepo.setClient(id, { status: utils.STATE_DISCONNECTED });
-});
-
+    clientRepo.setClient(id, { status: utils.STATE_DISCONNECTED });
+  });
 
   client.on("ready", async () => {
     try {
